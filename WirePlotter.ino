@@ -1,24 +1,24 @@
 // ===========  CONSTANTS  ===========
 // NC Normalised Units, denotes lengths in x/y coords based on this normalised width/height:
-float NU_WIDTH = 100;
-float NU_HEIGHT = 100;
+float NU_WIDTH = 50;
+float NU_HEIGHT = 42;
 
 // SU Step Units, denotes lengths in stepper steps
 int STEPS_PER_TURN = 2048; // Why is this half of the specced value
 int SU_MIN = 0;
-int SU_MAX = STEPS_PER_TURN;
 float TURNS_FOR_MAX_LENGTH = 3.5;
+int SU_MAX = STEPS_PER_TURN * TURNS_FOR_MAX_LENGTH;
 
 // ========== STATE ================
 // int position = 0;
 // int targetPosition = position;
-int x = 0;
-int y = 0;
+float x = NU_WIDTH/2;
+float y = NU_HEIGHT/2;
 // int targetX = x;
 // int targetY = y;
 
-int r1_val = 0;
-int r2_val = 0;
+float r1_val = 0; 
+float r2_val = 0;
 
 // #########################  Wifi stuff #####################
 #include <WiFi.h>
@@ -107,22 +107,25 @@ void handleNetCall() {
         //   digitalWrite(13, LOW);  // GET /L turns the LED off
         // }
                 // Check to see if the client request was "GET /H" or "GET /L":
+        float margin = 10.0;
         if (currentLine.endsWith("GET /R")) {
           Serial.println("Right");
-          x += 100;
+          x += 1;
         }
         if (currentLine.endsWith("GET /L")) {
           Serial.println("Left");
-          x -= 100;
+          x -= 1;
         }
         if (currentLine.endsWith("GET /U")) {
           Serial.println("Up");
-          y += 100;
+          y -= 1;
         }
         if (currentLine.endsWith("GET /D")) {
           Serial.println("Down");
-          y -= 100;
+          y += 1;
         }
+        x = min(max(x, margin), NU_WIDTH-margin);
+        y = min(max(y, margin), NU_HEIGHT-margin);
       }
     }
     // close the connection:
@@ -141,8 +144,8 @@ void handleNetCall() {
 Adafruit_MotorShield AFMS = Adafruit_MotorShield();
 // Or, create it with a different I2C address (say for stacking)
 // Adafruit_MotorShield AFMS = Adafruit_MotorShield(0x61);
-Adafruit_StepperMotor *leftMotor = AFMS.getStepper(4096/2, 1); // steps per turn, side
-Adafruit_StepperMotor *rightMotor = AFMS.getStepper(4096/2, 2); // steps per turn, side
+Adafruit_StepperMotor *leftMotor = AFMS.getStepper(4096/2, 2); // steps per turn, side
+Adafruit_StepperMotor *rightMotor = AFMS.getStepper(4096/2, 1); // steps per turn, side
 
 
 void setupSteppers(){
@@ -157,6 +160,7 @@ void setupSteppers(){
 
   leftMotor->setSpeed(6000);
   rightMotor->setSpeed(6000);
+
 }
 
 void setup() {
@@ -165,19 +169,21 @@ void setup() {
   Serial.println("Stepper plotter setup!");
   setupNetwork();
   setupSteppers();
+  r1_val = r1(x, y);
+  r2_val = r2(x, y);
 }
 
 // Circle eq for dx = 100
 // sqrt(x^2 + y^2) = r1
 // sqrt((x-100)^2 + y^2) = r2
-float r1(int x, int y){
+float r1(float x, float y){
   return sqrt(sq(x)+sq(y));
 }
-float r2(int x, int y){
-  if (x > NU_WIDTH) {
-    Serial.println("err: x argument larger than 100!");
-    x = NU_WIDTH;
-  }
+float r2(float x, float y){
+  // if (x > NU_WIDTH) {
+  //   Serial.println("err: x argument larger than 100!");
+  //   x = NU_WIDTH;
+  // }
   return sqrt(sq(NU_WIDTH-x)+sq(y));
 }
 
@@ -201,42 +207,6 @@ void printVal(String name, float value){
   Serial.println(value);
 }
 
-// void fetchInstrFromSerial() {
-//   if (Serial.available()) {
-//     String serialIn = Serial.readString();  //read until timeout
-//     Serial.println("<--");
-//     serialIn.trim();
-//     // Split string input into left:right
-//     int split = serialIn.indexOf(":");
-//     // Optimistic to hope that these are always ints...
-//     int x = serialIn.substring(0, split).toInt();
-//     int y = serialIn.substring(split+1).toInt();
-//     printVal("x", x);
-//     printVal("y", y);
-//     float nuR1 = r1(x, y);
-//     float nuR2 = r2(x, y);
-//     printVal("nuR1", nuR1);
-//     printVal("nuR2", nuR2);
-//     printVal("suR1", NU_length_to_SU_length(nuR1));
-//     printVal("suR2", NU_length_to_SU_length(nuR2));
-    
-//     // Move stepper to int(left)
-//     // targetPosition = x;
-//     moveSteppers();
-//     Serial.println("ack");
-//     // int asInt = x.toInt();                       // remove any \r \n whitespace at the end of the String
-//     // if (asInt) {
-//     //   targetPosition = asInt;
-//     //   moveSteppers();
-//     //   Serial.println("ack");
-//     // } else {
-//     //   Serial.println("NaN: " + x);
-//     // }
-
-//     Serial.println("-->");
-//   }
-// }
-
 void loop() {
   // Serial.println("Loop");
   handleNetCall();
@@ -249,6 +219,14 @@ void moveSteppers() {
 
   float targetR1 = r1(x, y);
   float targetR2 = r2(x, y);
+
+  Serial.print(targetR1);
+  Serial.print(" ");
+  Serial.print(targetR2);
+  Serial.print(" ");
+  Serial.print(x);
+  Serial.print(" ");
+  Serial.println(y);
 
   if (targetR1 < SU_MIN) {
     targetR1 = SU_MIN;
@@ -270,18 +248,23 @@ void moveSteppers() {
     Serial.print("err:Y higher than max:");
     Serial.println(SU_MAX);
   }
-  int deltaX = targetR1-r1_val;
-  int deltaY = targetR2-r2_val;
-  int dirX = FORWARD;
-  if (deltaX < 0) {
-    dirX = BACKWARD;
+  float deltaR1 = targetR1-r1_val;
+  float deltaR2 = targetR2-r2_val;
+  int dirR1 = FORWARD;
+  if (deltaR1 < 0) {
+    dirR1 = BACKWARD;
   }
-  int dirY = FORWARD;
-  if (deltaY < 0) {
-    dirY = BACKWARD;
+  int dirR2 = FORWARD;
+  if (deltaR2 < 0) {
+    dirR2 = BACKWARD;
   }
-  rightMotor->step(abs(deltaX), dirX, SINGLE);
-  leftMotor->step(abs(deltaY), dirY, SINGLE);
+
+  // Serial.print(deltaR1);
+  // Serial.print(";");
+  // Serial.println(deltaR2);
+
+  leftMotor->step(abs(deltaR1)*108.0, dirR1, SINGLE);
+  rightMotor->step(abs(deltaR2)*108.0, dirR2, SINGLE);
   r1_val = targetR1;
   r2_val = targetR2;
 }
