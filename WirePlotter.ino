@@ -10,12 +10,15 @@ int SU_MAX = STEPS_PER_TURN;
 float TURNS_FOR_MAX_LENGTH = 3.5;
 
 // ========== STATE ================
-int position = 0;
-int targetPosition = position;
+// int position = 0;
+// int targetPosition = position;
 int x = 0;
 int y = 0;
-int targetX = x;
-int targetY = y;
+// int targetX = x;
+// int targetY = y;
+
+int r1_val = 0;
+int r2_val = 0;
 
 // #########################  Wifi stuff #####################
 #include <WiFi.h>
@@ -114,11 +117,11 @@ void handleNetCall() {
         }
         if (currentLine.endsWith("GET /U")) {
           Serial.println("Up");
-          y -= 100;
+          y += 100;
         }
         if (currentLine.endsWith("GET /D")) {
           Serial.println("Down");
-          y += 100;
+          y -= 100;
         }
       }
     }
@@ -198,41 +201,41 @@ void printVal(String name, float value){
   Serial.println(value);
 }
 
-void fetchInstrFromSerial() {
-  if (Serial.available()) {
-    String serialIn = Serial.readString();  //read until timeout
-    Serial.println("<--");
-    serialIn.trim();
-    // Split string input into left:right
-    int split = serialIn.indexOf(":");
-    // Optimistic to hope that these are always ints...
-    int x = serialIn.substring(0, split).toInt();
-    int y = serialIn.substring(split+1).toInt();
-    printVal("x", x);
-    printVal("y", y);
-    float nuR1 = r1(x, y);
-    float nuR2 = r2(x, y);
-    printVal("nuR1", nuR1);
-    printVal("nuR2", nuR2);
-    printVal("suR1", NU_length_to_SU_length(nuR1));
-    printVal("suR2", NU_length_to_SU_length(nuR2));
+// void fetchInstrFromSerial() {
+//   if (Serial.available()) {
+//     String serialIn = Serial.readString();  //read until timeout
+//     Serial.println("<--");
+//     serialIn.trim();
+//     // Split string input into left:right
+//     int split = serialIn.indexOf(":");
+//     // Optimistic to hope that these are always ints...
+//     int x = serialIn.substring(0, split).toInt();
+//     int y = serialIn.substring(split+1).toInt();
+//     printVal("x", x);
+//     printVal("y", y);
+//     float nuR1 = r1(x, y);
+//     float nuR2 = r2(x, y);
+//     printVal("nuR1", nuR1);
+//     printVal("nuR2", nuR2);
+//     printVal("suR1", NU_length_to_SU_length(nuR1));
+//     printVal("suR2", NU_length_to_SU_length(nuR2));
     
-    // Move stepper to int(left)
-    targetPosition = x;
-    moveSteppers();
-    Serial.println("ack");
-    // int asInt = x.toInt();                       // remove any \r \n whitespace at the end of the String
-    // if (asInt) {
-    //   targetPosition = asInt;
-    //   moveSteppers();
-    //   Serial.println("ack");
-    // } else {
-    //   Serial.println("NaN: " + x);
-    // }
+//     // Move stepper to int(left)
+//     // targetPosition = x;
+//     moveSteppers();
+//     Serial.println("ack");
+//     // int asInt = x.toInt();                       // remove any \r \n whitespace at the end of the String
+//     // if (asInt) {
+//     //   targetPosition = asInt;
+//     //   moveSteppers();
+//     //   Serial.println("ack");
+//     // } else {
+//     //   Serial.println("NaN: " + x);
+//     // }
 
-    Serial.println("-->");
-  }
-}
+//     Serial.println("-->");
+//   }
+// }
 
 void loop() {
   // Serial.println("Loop");
@@ -243,28 +246,32 @@ void loop() {
 
 void moveSteppers() {
   // TODO use r1/r2 instead
-  if (targetX < SU_MIN) {
-    targetX = SU_MIN;
+
+  float targetR1 = r1(x, y);
+  float targetR2 = r2(x, y);
+
+  if (targetR1 < SU_MIN) {
+    targetR1 = SU_MIN;
     Serial.print("err:X lower than min:");
     Serial.print(SU_MIN);
   }
-  if (targetY < SU_MIN) {
-    targetY = SU_MIN;
+  if (targetR2 < SU_MIN) {
+    targetR2 = SU_MIN;
     Serial.print("err:Y lower than min:");
     Serial.print(SU_MIN);
   }
-  if (targetX > SU_MAX) {
-    targetX = SU_MAX;
+  if (targetR1 > SU_MAX) {
+    targetR1 = SU_MAX;
     Serial.print("err:X higher than max:");
     Serial.println(SU_MAX);
   }
-  if (targetY > SU_MAX) {
-    targetY = SU_MAX;
+  if (targetR2 > SU_MAX) {
+    targetR2 = SU_MAX;
     Serial.print("err:Y higher than max:");
     Serial.println(SU_MAX);
   }
-  int deltaX = targetX-x;
-  int deltaY = targetY-y;
+  int deltaX = targetR1-r1_val;
+  int deltaY = targetR2-r2_val;
   int dirX = FORWARD;
   if (deltaX < 0) {
     dirX = BACKWARD;
@@ -275,7 +282,6 @@ void moveSteppers() {
   }
   rightMotor->step(abs(deltaX), dirX, SINGLE);
   leftMotor->step(abs(deltaY), dirY, SINGLE);
-  x = targetX;
-  y = targetY;
-  // position = targetPosition;
+  r1_val = targetR1;
+  r2_val = targetR2;
 }
