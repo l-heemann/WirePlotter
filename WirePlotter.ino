@@ -14,11 +14,15 @@ int SU_MAX = STEPS_PER_TURN * TURNS_FOR_MAX_LENGTH;
 // int targetPosition = position;
 float x = NU_WIDTH/2;
 float y = NU_HEIGHT/2;
+float finalX = x;
+float finalY = y;
 // int targetX = x;
 // int targetY = y;
 
 float r1_val = 0; 
 float r2_val = 0;
+
+
 
 // #########################  Wifi stuff #####################
 #include <WiFi.h>
@@ -76,6 +80,7 @@ void handleNetCall() {
           // if the current line is blank, you got two newline characters in a row.
           // that's the end of the client HTTP request, so send a response:
           if (currentLine.length() == 0) {
+          
             // HTTP headers always start with a response code (e.g. HTTP/1.1 200 OK)
             // and a content-type so the client knows what's coming, then a blank line:
             client.println("HTTP/1.1 200 OK");
@@ -86,7 +91,9 @@ void handleNetCall() {
             client.print("<a href=\"/U\">up</a><br>");
             client.print("<a href=\"/L\">left</a> ");
             client.print("<a href=\"/R\">right</a><br>");
-            client.print("<a href=\"/D\">down</a><br>");
+            client.print("<a href=\"/D\">down</a><br><br>");
+
+            client.print("<a href=\"/25:21\">re-center</a><br>");
 
             // The HTTP response ends with another blank line:
             client.println();
@@ -99,33 +106,45 @@ void handleNetCall() {
           currentLine += c;      // add it to the end of the currentLine
         }
 
-        // // Check to see if the client request was "GET /H" or "GET /L":
-        // if (currentLine.endsWith("GET /H")) {
-        //   digitalWrite(13, HIGH);  // GET /H turns the LED on
-        // }
-        // if (currentLine.endsWith("GET /L")) {
-        //   digitalWrite(13, LOW);  // GET /L turns the LED off
-        // }
-                // Check to see if the client request was "GET /H" or "GET /L":
         float margin = 10.0;
+        if (currentLine.startsWith("GET /") && currentLine.endsWith(" ")) {
+          Serial.println(currentLine);
+          // GET /set?x=15&y=20 HTTP/1.1   
+          // "GET /15:20 "
+          int slashI = currentLine.indexOf("/");
+          int colonI = currentLine.indexOf(":");
+          if (slashI == -1 || colonI == -1) {
+            break;
+          }
+
+          String xStringValue = currentLine.substring(slashI+1, colonI);
+          String yStringValue = currentLine.substring(colonI+1, currentLine.length()-1);
+          int tempX = xStringValue.toInt();
+          int tempY = yStringValue.toInt();
+          if (tempX < 0 || tempY < 0) {
+            break;
+          }
+          finalX = tempX;
+          finalY = tempY;
+        }
         if (currentLine.endsWith("GET /R")) {
           Serial.println("Right");
-          x += 1;
+          finalX += 1;
         }
         if (currentLine.endsWith("GET /L")) {
           Serial.println("Left");
-          x -= 1;
+          finalX -= 1;
         }
         if (currentLine.endsWith("GET /U")) {
           Serial.println("Up");
-          y -= 1;
+          finalY -= 1;
         }
         if (currentLine.endsWith("GET /D")) {
           Serial.println("Down");
-          y += 1;
+          finalY += 1;
         }
-        x = min(max(x, margin), NU_WIDTH-margin);
-        y = min(max(y, margin), NU_HEIGHT-margin);
+        finalX = min(max(finalX, margin), NU_WIDTH-margin);
+        finalY = min(max(finalY, margin), NU_HEIGHT-margin);
       }
     }
     // close the connection:
@@ -207,16 +226,22 @@ void printVal(String name, float value){
   Serial.println(value);
 }
 
+float moveDistance = 0.2;
+
+
 void loop() {
-  // Serial.println("Loop");
   handleNetCall();
-  moveSteppers();
+  float len = sqrt(sq(finalX - x) + sq(finalY - y));
+  if (len > 0.1) {
+    float ratio = moveDistance / len;
+    x = x + (finalX - x) * ratio;
+    y = y + (finalY - y) * ratio;
+    moveSteppers();
+  }
 }
 
 
 void moveSteppers() {
-  // TODO use r1/r2 instead
-
   float targetR1 = r1(x, y);
   float targetR2 = r2(x, y);
 
@@ -226,7 +251,11 @@ void moveSteppers() {
   Serial.print(" ");
   Serial.print(x);
   Serial.print(" ");
-  Serial.println(y);
+  Serial.print(y);
+  Serial.print(" ");
+  Serial.print(finalX);
+  Serial.print(" ");
+  Serial.println(finalY);
 
   if (targetR1 < SU_MIN) {
     targetR1 = SU_MIN;
